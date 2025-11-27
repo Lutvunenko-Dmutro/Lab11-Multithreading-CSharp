@@ -43,7 +43,7 @@
 
 1. Клонуйте репозиторій:
    ```bash
-   git clone [https://github.com/ВАШ_НІКНЕЙМ/Lab11-Multithreading-CSharp.git](https://github.com/ВАШ_НІКНЕЙМ/Lab11-Multithreading-CSharp.git)# Лабораторна робота №11: Багатопотоковість у .NET (C#)
+   git clone https://github.com/Lutvunenko-Dmutro/Lab11-Multithreading-CSharp.git
 
 2.  Перейдіть у папку проєкту:
     ```bash
