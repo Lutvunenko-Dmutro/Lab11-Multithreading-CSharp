@@ -1,182 +1,215 @@
-﻿using System;
+using System;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using BenchmarkDotNet.Running;
+using Spectre.Console;
 
-namespace Lab11
+namespace AsyncShowcase
 {
     class Program
     {
-        // Глобальний об'єкт для синхронізації кольорів (щоб кольори не змішувались)
-        static readonly object consoleLock = new object();
-
-        // Масив для Завдання №2
-        static int[] task2Array = new int[15];
-
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            Console.OutputEncoding = Encoding.UTF8;
-            Console.Title = "Лабораторна робота №11 | Литвиненко Дмитро | Варіант 8";
-
-            while (true)
+            if (args.Length > 0 && args[0] == "--benchmark")
             {
-                Console.ResetColor();
-                Console.Clear();
-                Console.WriteLine("=============================================");
-                Console.WriteLine("    ЛАБОРАТОРНА РОБОТА №11 (ПОТОКИ)");
-                Console.WriteLine("    Виконав: Литвиненко Дмитро (Вар. 8)");
-                Console.WriteLine("=============================================");
-                Console.WriteLine("1. Запустити Завдання №1 (Символи '=' та Числа)");
-                Console.WriteLine("2. Запустити Завдання №2 (Масиви: Парні індекси vs Квадрати)");
-                Console.WriteLine("0. Вихід");
-                Console.WriteLine("=============================================");
-                Console.Write("Ваш вибiр > ");
+                BenchmarkRunner.Run<MultithreadingBenchmarks>();
+                return;
+            }
 
-                string choice = Console.ReadLine();
+            Console.OutputEncoding = Encoding.UTF8;
+            Console.Title = "Async Showcase | .NET Concurrency";
 
-                switch (choice)
+            // 1. Кероване скасування (CancellationToken)
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (s, e) =>
+            {
+                e.Cancel = true; 
+                cts.Cancel();
+                AnsiConsole.MarkupLine("\n[red]Отримано сигнал зупинки. Коректне завершення потоків...[/]");
+            };
+
+            while (!cts.Token.IsCancellationRequested)
+            {
+                AnsiConsole.Clear();
+                AnsiConsole.Write(
+                    new FigletText("Async Showcase")
+                        .LeftJustified()
+                        .Color(Color.Green));
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[cyan]Оберіть дію (використовуйте стрілки):[/]")
+                        .PageSize(5)
+                        .AddChoices(new[] {
+                            "1. Демонстрація Thread-Safety (Символи та числа)",
+                            "2. Асинхронна обробка масивів",
+                            "3. Запустити Benchmarks (Продуктивність)",
+                            "0. Вихід"
+                        }));
+
+                if (choice.StartsWith("0"))
+                    break;
+                
+                try
                 {
-                    case "1":
-                        RunTask1();
-                        break;
-                    case "2":
-                        RunTask2();
-                        break;
-                    case "0":
-                        return;
-                    default:
-                        Console.WriteLine("Невірний вибір. Натисніть Enter...");
-                        Console.ReadLine();
-                        break;
+                    if (choice.StartsWith("1"))
+                        await RunTask1Async(cts.Token);
+                    else if (choice.StartsWith("2"))
+                        await RunTask2Async(cts.Token);
+                    else if (choice.StartsWith("3"))
+                    {
+                        AnsiConsole.MarkupLine("[yellow]Запуск Benchmarks... Це краще робити командою: dotnet run -c Release[/]");
+                        BenchmarkRunner.Run<MultithreadingBenchmarks>();
+                        Pause();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    AnsiConsole.MarkupLine("\n[red]Операцію було скасовано (Ctrl+C).[/]");
+                    break;
                 }
             }
         }
 
-        // ========================================================
-        // ЗАВДАННЯ №1 (Варіант 8)
-        // Т0: Виводить 5 символів «=».
-        // Т1: Виводить 8 випадкових цілих чисел (0..10).
-        // ========================================================
-        static void RunTask1()
+        static async Task RunTask1Async(CancellationToken token)
         {
-            Console.Clear();
-            PrintHeader("ЗАВДАННЯ 1: Потоки символів і чисел");
+            AnsiConsole.MarkupLine("[bold cyan]--- Демонстрація Thread-Safety (Символи та числа) ---[/]");
 
-            Thread t0 = new Thread(Task1_PrintEquals);
-            Thread t1 = new Thread(Task1_PrintRandomNumbers);
+            // 2. Візуальна цукерка: Spectre.Console Progress
+            await AnsiConsole.Progress()
+                .AutoClear(false)
+                .Columns(new ProgressColumn[] 
+                {
+                    new TaskDescriptionColumn(),
+                    new ProgressBarColumn(),
+                    new PercentageColumn(),
+                    new SpinnerColumn(),
+                })
+                .StartAsync(async ctx =>
+                {
+                    var task0 = ctx.AddTask("[cyan]T0: Вивід '='[/]", maxValue: 100);
+                    var task1 = ctx.AddTask("[yellow]T1: Випадкові числа[/]", maxValue: 100);
 
-            t0.Start();
-            t1.Start();
+                    // 3. Міграція на Task.Run
+                    var t0 = Task.Run(async () =>
+                    {
+                        for (int i = 0; i < 5; i++)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            AnsiConsole.Markup("[cyan]= [/]");
+                            task0.Increment(20);
+                            await Task.Delay(200, token); // Замість Thread.Sleep
+                        }
+                    }, token);
 
-            t0.Join();
-            t1.Join();
+                    var t1 = Task.Run(async () =>
+                    {
+                        for (int i = 0; i < 8; i++)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            // 4. Оптимізація пам'яті: Random.Shared
+                            int num = Random.Shared.Next(0, 11);
+                            AnsiConsole.Markup($"[yellow]{num} [/]");
+                            task1.Increment(12.5);
+                            await Task.Delay(150, token);
+                        }
+                    }, token);
 
-            PrintFooter();
+                    await Task.WhenAll(t0, t1);
+                });
+
+            AnsiConsole.WriteLine();
+            Pause();
         }
 
-        static void Task1_PrintEquals()
+        static async Task RunTask2Async(CancellationToken token)
         {
-            for (int i = 0; i < 5; i++)
+            AnsiConsole.MarkupLine("[bold green]--- Асинхронна обробка масивів ---[/]");
+
+            // 5. Чисті функції: локальний стан замість глобального
+            int[] array = new int[15];
+            for (int i = 0; i < array.Length; i++)
             {
-                PrintColored("T0: = ", ConsoleColor.Cyan);
-                Thread.Sleep(200); // Затримка для демонстрації паралельності
+                array[i] = Random.Shared.Next(1, 20);
             }
-        }
 
-        static void Task1_PrintRandomNumbers()
-        {
-            Random random = new Random();
-            for (int i = 0; i < 8; i++)
+            AnsiConsole.MarkupLine($"[grey]Згенерований масив: [[{string.Join(", ", array)}]][/]\n");
+
+            await AnsiConsole.Progress()
+                .AutoClear(false)
+                .Columns(new ProgressColumn[] 
+                {
+                    new TaskDescriptionColumn(),
+                    new ProgressBarColumn(),
+                    new PercentageColumn(),
+                    new SpinnerColumn(),
+                })
+                .StartAsync(async ctx =>
+                {
+                    int evenSteps = (int)Math.Ceiling(array.Length / 2.0); 
+                    int oddSteps = array.Length / 2;
+
+                    var taskEven = ctx.AddTask("[cyan]T0: Парні індекси[/]", maxValue: evenSteps);
+                    var taskOdd = ctx.AddTask("[yellow]T1: Квадрати непарних[/]", maxValue: oddSteps);
+
+                    var t0 = Task.Run(async () =>
+                    {
+                        for (int i = 0; i < array.Length; i += 2)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            AnsiConsole.MarkupLine($"[cyan]T0 [[idx {i}]]: {array[i]}[/]");
+                            taskEven.Increment(1);
+                            await Task.Delay(150, token);
+                        }
+                    }, token);
+
+                    var t1 = Task.Run(async () =>
+                    {
+                        for (int i = 1; i < array.Length; i += 2)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            int square = array[i] * array[i];
+                            AnsiConsole.MarkupLine($"[yellow]\tT1 [[idx {i}]]: {array[i]}^2 = {square}[/]");
+                            taskOdd.Increment(1);
+                            await Task.Delay(150, token);
+                        }
+                    }, token);
+
+                    await Task.WhenAll(t0, t1);
+                });
+
+            AnsiConsole.WriteLine();
+
+            // Render a beautiful summary table
+            var table = new Table().Expand().Border(TableBorder.Rounded);
+            table.Title("[bold green]Звіт про обробку масиву[/]");
+            table.AddColumn(new TableColumn("[cyan]Індекс[/]").Centered());
+            table.AddColumn(new TableColumn("[white]Оригінальне значення[/]").Centered());
+            table.AddColumn(new TableColumn("[yellow]Результат обробки[/]").Centered());
+
+            for (int i = 0; i < array.Length; i++)
             {
-                int num = random.Next(0, 11);
-                PrintColored($"T1: {num} ", ConsoleColor.Yellow);
-                Thread.Sleep(200);
+                if (i % 2 == 0)
+                {
+                    table.AddRow($"[cyan]{i}[/]", $"[white]{array[i]}[/]", $"[cyan]Без змін ({array[i]})[/]");
+                }
+                else
+                {
+                    table.AddRow($"[yellow]{i}[/]", $"[white]{array[i]}[/]", $"[yellow]Квадрат ({array[i] * array[i]})[/]");
+                }
             }
+
+            AnsiConsole.Write(table);
+
+            AnsiConsole.WriteLine();
+            Pause();
         }
 
-        // ========================================================
-        // ЗАВДАННЯ №2 (Варіант 8)
-        // Т0: Вивести всі елементи з парними індексами.
-        // Т1: Вивести квадрати всіх елементів з непарними індексами.
-        // ========================================================
-        static void RunTask2()
+        static void Pause()
         {
-            Console.Clear();
-            PrintHeader("ЗАВДАННЯ 2: Обробка масиву у потоках");
-
-            // 1. Ініціалізація масиву
-            Random rand = new Random();
-            Console.Write("Згенерований масив: [ ");
-            for (int i = 0; i < task2Array.Length; i++)
-            {
-                task2Array[i] = rand.Next(1, 20);
-                Console.Write(task2Array[i] + " ");
-            }
-            Console.WriteLine("]\n");
-
-            // 2. Створення потоків
-            Thread t0 = new Thread(Task2_EvenIndices);
-            Thread t1 = new Thread(Task2_OddSquares);
-
-            t0.Start();
-            t1.Start();
-
-            t0.Join();
-            t1.Join();
-
-            PrintFooter();
-        }
-
-        static void Task2_EvenIndices()
-        {
-            PrintColored("\n[T0 Старт: Парні індекси]\n", ConsoleColor.Cyan);
-            for (int i = 0; i < task2Array.Length; i += 2)
-            {
-                PrintColored($"T0 [idx {i}]: {task2Array[i]}\n", ConsoleColor.Cyan);
-                Thread.Sleep(150);
-            }
-        }
-
-        static void Task2_OddSquares()
-        {
-            PrintColored("\n\t[T1 Старт: Квадрати непарних]\n", ConsoleColor.Yellow);
-            for (int i = 1; i < task2Array.Length; i += 2)
-            {
-                int square = task2Array[i] * task2Array[i];
-                PrintColored($"\tT1 [idx {i}]: {task2Array[i]}^2 = {square}\n", ConsoleColor.Yellow);
-                Thread.Sleep(150);
-            }
-        }
-
-        // ========================================================
-        // ДОПОМІЖНІ МЕТОДИ (Краса та Потокобезпечний вивід)
-        // ========================================================
-
-        // Метод для кольорового виводу, захищений від змішування кольорів
-        static void PrintColored(string message, ConsoleColor color)
-        {
-            lock (consoleLock)
-            {
-                Console.ForegroundColor = color;
-                Console.Write(message);
-                Console.ResetColor();
-            }
-        }
-
-        static void PrintHeader(string title)
-        {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"--- {title} ---");
-            Console.ResetColor();
-            Console.WriteLine();
-        }
-
-        static void PrintFooter()
-        {
-            Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine("Потоки завершили роботу. Натисніть будь-яку клавішу...");
-            Console.ResetColor();
-            Console.ReadKey();
+            AnsiConsole.MarkupLine("[grey]Натисніть будь-яку клавішу для продовження...[/]");
+            Console.ReadKey(true);
         }
     }
 }
