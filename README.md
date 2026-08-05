@@ -71,7 +71,8 @@ BenchmarkDotNet v0.15.8, Windows 11
    ```
 
 ## 🔗 Пов'язані проєкти
-- [SharedResourcesShowcase](https://github.com/Lutvunenko-Dmutro/SharedResourcesShowcase) — Продовження теми: багатопотокова робота зі спільними даними, синхронізація (`lock`) та Clean Architecture.
+- [SharedResourcesShowcase](https://github.com/Lutvunenko-Dmutro/SharedResourcesShowcase) — синхронізація потоків (`lock`, `Task`) та потокобезпечний доступ до спільних ресурсів.
+- [ThreadPrioritiesShowcase](https://github.com/Lutvunenko-Dmutro/ThreadPrioritiesShowcase) — дослідження впливу пріоритетів потоків на розподіл процесорного часу.
 
 ---
 *Created by [Dmytro Lytvynenko](https://github.com/Lutvunenko-Dmutro)*
