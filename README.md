@@ -70,5 +70,8 @@ BenchmarkDotNet v0.15.8, Windows 11
    dotnet run -c Release -- --benchmark
    ```
 
+## 🔗 Пов'язані проєкти
+- [SharedResourcesShowcase](https://github.com/Lutvunenko-Dmutro/SharedResourcesShowcase) — Продовження теми: багатопотокова робота зі спільними даними, синхронізація (`lock`) та Clean Architecture.
+
 ---
 *Created by [Dmytro Lytvynenko](https://github.com/Lutvunenko-Dmutro)*
